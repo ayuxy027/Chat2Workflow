@@ -1,0 +1,83 @@
+# Production stack for the Fonz Workflows prototype. One VM, three containers.
+#
+# WHY EVERYTHING IS ON ONE BOX. The Next.js API routes hold the Temporal
+# client, so splitting the frontend off means Temporal's gRPC port has to face
+# the public internet — and a self-hosted Temporal server ships with NO
+# authentication. Anyone who found it could start, signal or cancel workflows.
+# Keeping the frontend here means Temporal binds to the internal docker network
+# and is never reachable from outside. Only port 3000 is exposed.
+#
+#   temporal   dev server, SQLite. Internal only.
+#   worker     Temporal worker: document tools and model calls. No ports.
+#   frontend   Next.js. The only thing the firewall lets through.
+
+services:
+  temporal:
+    image: temporalio/temporal:1.5.0
+    container_name: wf-temporal
+    command:
+      - server
+      - start-dev
+      - --ip=0.0.0.0
+      - --port=7233
+      - --ui-port=8233
+      - --db-filename=/data/temporal.db
+      - --namespace=default
+      - --log-level=warn
+    volumes:
+      - temporal-data:/data
+    # Deliberately NO `ports:` — reachable only from the other containers.
+    expose:
+      - "7233"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/worker.Dockerfile
+    container_name: wf-worker
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: workflows
+      MAKORA_BASE_URL: ${MAKORA_BASE_URL}
+      MAKORA_MODEL: ${MAKORA_MODEL}
+      MAKORA_API_KEY: ${MAKORA_API_KEY}
+      # Both processes MUST select the same blob driver. They are on one host
+      # here, but they are still separate processes: if one falls back to a
+      # local directory the other cannot read it, and every document step fails
+      # with no obvious cause. This has already happened twice in development.
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN}
+      WORKER_BUILD_ID: ${WORKER_BUILD_ID:-vm}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    container_name: wf-frontend
+    depends_on:
+      temporal:
+        condition: service_healthy
+    ports:
+      - "80:3000"
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: workflows
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN}
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    restart: unless-stopped
+
+volumes:
+  temporal-data:

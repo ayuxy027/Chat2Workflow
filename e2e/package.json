@@ -1,0 +1,16 @@
+{
+  "name": "@wf/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end enforcement harness: brings the stack up, asserts the whole loop, tears it down.",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "e2e": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3"
+  }
+}

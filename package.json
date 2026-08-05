@@ -1,0 +1,27 @@
+{
+  "name": "workflows",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared",
+    "storage",
+    "e2e"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '@wf/frontend' --filter '@wf/backend' dev",
+    "dev:frontend": "bun run --filter @wf/frontend dev",
+    "dev:backend": "bun run --filter @wf/backend dev",
+    "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "e2e": "bun run e2e/src/main.ts",
+    "temporal:up": "docker compose up -d",
+    "temporal:down": "docker compose down"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,220 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/base.css";
+
+/* ---------------------------------------------------------------------------
+   Light theme. Black and white only — no hue, anywhere.
+
+   Only two literal colours exist: #FFFFFF and #0A0A0A. Everything else is
+   black at an opacity. Status is encoded with border weight, stroke count,
+   motion, and glyph swaps — never colour. See PRD.md §3.
+
+   There is deliberately no prefers-color-scheme: dark block. The theme is
+   light by product decision, not by default.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --color-bg: #ffffff;
+  --color-fg: #0a0a0a;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f4f4;
+  --color-dot: rgba(0, 0, 0, 0.13);
+  --color-line: rgba(0, 0, 0, 0.18);
+  --color-line-strong: rgba(0, 0, 0, 0.55);
+  --color-muted: rgba(0, 0, 0, 0.52);
+  --color-faint: rgba(0, 0, 0, 0.06);
+
+  --shadow-node: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  --radius-node: 8px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Focus -------------------------------------------------------------------
+   The user agent's default focus ring is the one piece of chrome on this page
+   that arrives with a HUE: Chrome paints `outline: auto` in the platform accent
+   (blue on macOS), which violates the hard constraint in PRD §3.1 the moment
+   anyone reaches for the Tab key. It is replaced rather than removed — a
+   keyboard user needs it more than a mouse user does.
+
+   The replacement is DASHED on purpose. A solid offset ring already means
+   `error` (§3.4), and a focused healthy control must not read as a failed one.
+--------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 1px dashed var(--color-line-strong);
+  outline-offset: 2px;
+}
+
+/* Fields carry focus on their own border, so an outline would double up. */
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* --- React Flow theming -----------------------------------------------------
+   Override xyflow's own CSS variables rather than fighting its stylesheet.
+   Full variable list: reference/react-flow/src/xy-theme.css
+--------------------------------------------------------------------------- */
+
+.react-flow {
+  --xy-background-color: var(--color-bg);
+  --xy-node-background-color-default: var(--color-surface);
+  --xy-node-border-default: 1px solid var(--color-line);
+  --xy-node-border-radius-default: var(--radius-node);
+  --xy-node-boxshadow-default: var(--shadow-node);
+  --xy-node-color-default: var(--color-fg);
+
+  --xy-handle-background-color-default: var(--color-bg);
+  --xy-handle-border-color-default: var(--color-fg);
+
+  --xy-edge-stroke-default: var(--color-line);
+  --xy-edge-stroke-selected-default: var(--color-fg);
+  --xy-edge-stroke-width-default: 1;
+
+  --xy-selection-background-color: rgba(0, 0, 0, 0.04);
+  --xy-selection-border-default: 1px dashed var(--color-line-strong);
+
+  --xy-attribution-background-color-default: transparent;
+}
+
+/* Handles are circles — part of the circular motif shared with the rail
+   buttons and the run control. */
+.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  border-width: 1px;
+  border-radius: 9999px;
+}
+
+.react-flow__handle:hover {
+  background: var(--color-fg);
+}
+
+.react-flow__edge-path {
+  stroke: var(--color-line);
+  stroke-width: 1;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--color-line-strong);
+}
+
+/* --- Status encoding (no colour) -------------------------------------------
+   running : a dash marches around the perimeter
+   done    : 2px solid
+   error   : 2px solid + an offset outer ring (double stroke)
+--------------------------------------------------------------------------- */
+
+@keyframes wf-march {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+@keyframes wf-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.wf-marching {
+  animation: wf-march 0.7s linear infinite;
+}
+
+/* --- Arrival ----------------------------------------------------------------
+   The planner streams nodes as it generates them, so they land one at a time
+   over several seconds. Without this each one pops in at full size and the
+   canvas reads as a series of jump-cuts; with it, a node resolves into place
+   and the eye can follow which one is new. Deliberately short and subtle —
+   this reinforces "something arrived", it does not perform.
+
+   Scale, not translate: React Flow owns the node's transform for panning and
+   zooming, so animating position here would fight it. The keyframe touches
+   only the inner shell.
+--------------------------------------------------------------------------- */
+
+@keyframes wf-arrive {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.wf-arrive {
+  animation: wf-arrive 0.22s cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+/* A placeholder while the planner is thinking, so the pause before the first
+   node is not dead air. Breathes rather than spins. */
+@keyframes wf-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.wf-pulse {
+  animation: wf-pulse 1.6s ease-in-out infinite;
+}
+
+.react-flow__edge.wf-edge-active .react-flow__edge-path {
+  stroke: var(--color-fg);
+  stroke-dasharray: 4 4;
+  animation: wf-flow 0.6s linear infinite;
+}
+
+/* Respect users who asked the OS to stop moving things. Status stays legible
+   without motion — the encodings that do the real work are static:
+
+     running  2px dashed perimeter (the dash stops marching, it does not vanish)
+     done     2px solid fg
+     error    2px fg + offset ring
+     queued   glyph at 45%
+
+   and every node header additionally spells the state out in words, so the
+   status survives no-motion and no-colour at the same time.
+
+   The sweep is deliberately broad. Panel slides, opacity fades, and colour
+   transitions are all motion the preference is asking us to stop; leaving them
+   in because they are "small" is how a reduced-motion setting ends up meaning
+   almost nothing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .wf-marching,
+  .wf-pulse,
+  .react-flow__edge.wf-edge-active .react-flow__edge-path {
+    animation: none !important;
+  }
+
+  /* The arrival animation must still RUN — it ends at opacity 1, and the blanket
+     rule above already collapses it to an instant. Cancelling it outright with
+     `animation: none` would leave the node at its `from` keyframe on some
+     engines, i.e. invisible. Reduced motion means no movement, not no node. */
+  .wf-arrive {
+    animation-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,102 @@
+# Render Blueprint for the Fonz Workflows prototype.
+#
+# Three services. The frontend is NOT here: it goes to Vercel, because Next.js
+# route handlers and SSE are what Vercel is good at. Everything below is the
+# part Vercel cannot host.
+#
+#   wf-temporal   Temporal server. Private, not exposed to the internet.
+#   wf-postgres   Its database. Temporal keeps every workflow's history here,
+#                 which is why it cannot run on an ephemeral disk.
+#   wf-worker     The Temporal worker: document tools and model calls. A
+#                 long-running poller, which is precisely why it cannot be
+#                 serverless.
+#
+# Apply with:  render blueprint launch
+#
+# After the first apply, set the secret env vars flagged `sync: false` in the
+# Render dashboard. They are deliberately not in this file.
+
+databases:
+  - name: wf-postgres
+    databaseName: temporal
+    user: temporal
+    plan: free
+    # Free Postgres on Render expires after 30 days. Fine for a prototype,
+    # not for anything you need to keep.
+
+services:
+  # ---------------------------------------------------------------- Temporal
+  - type: pserv # private service: reachable only from other Render services
+    name: wf-temporal
+    runtime: image
+    plan: starter
+    image:
+      url: docker.io/temporalio/auto-setup:1.29
+    envVars:
+      - key: DB
+        value: postgres12
+      - key: POSTGRES_SEEDS
+        fromDatabase:
+          name: wf-postgres
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: wf-postgres
+          property: port
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: wf-postgres
+          property: user
+      - key: POSTGRES_PWD
+        fromDatabase:
+          name: wf-postgres
+          property: password
+      - key: DBNAME
+        value: temporal
+      - key: VISIBILITY_DBNAME
+        value: temporal_visibility
+      - key: ENABLE_ES
+        value: "false"
+      # auto-setup creates the namespace on first boot so the worker has
+      # something to connect to without a manual step.
+      - key: DEFAULT_NAMESPACE
+        value: default
+      - key: DEFAULT_NAMESPACE_RETENTION
+        value: 72h
+
+  # ------------------------------------------------------------------ Worker
+  - type: worker
+    name: wf-worker
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install -g bun@1.3.14 && bun install --frozen-lockfile && bun run --filter @wf/backend build
+    startCommand: node backend/dist/main.js
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # The worker talks to Temporal over the private network. `fromService`
+      # resolves the internal hostname, so this never crosses the internet.
+      - key: TEMPORAL_ADDRESS
+        fromService:
+          type: pserv
+          name: wf-temporal
+          property: hostport
+      - key: TEMPORAL_NAMESPACE
+        value: default
+      - key: TEMPORAL_TASK_QUEUE
+        value: workflows
+
+      # Model endpoint. Secrets are set in the dashboard, never committed.
+      - key: MAKORA_BASE_URL
+        value: https://inference.makora.com/v1
+      - key: MAKORA_MODEL
+        value: deepseek-ai/DeepSeek-V4-Flash
+      - key: MAKORA_API_KEY
+        sync: false
+
+      # Blob storage. The worker and the Vercel frontend must address the SAME
+      # store: they are on different machines with no shared filesystem, so a
+      # local path here means every document step fails. See storage/.
+      - key: BLOB_READ_WRITE_TOKEN
+        sync: false

@@ -1,0 +1,13 @@
+node_modules/
+.next/
+dist/
+out/
+.data/
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
+.vercel
+./*/.gcloud
+research
+.env*

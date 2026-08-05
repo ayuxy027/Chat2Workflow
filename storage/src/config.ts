@@ -13,6 +13,7 @@ import { BlobStoreConfigError } from "./errors";
 
 export type BlobStoreConfig =
   | { driver: "filesystem"; dir: string }
+  | { driver: "vercel-blob"; token: string }
   | {
       driver: "s3";
       endpoint: string;
@@ -34,6 +35,16 @@ const S3_REQUIRED = [
 
 const S3_OPTIONAL = ["BLOB_S3_FORCE_PATH_STYLE"] as const;
 
+/**
+ * The prefix every Vercel Blob READ-WRITE token carries. Lives here rather than
+ * in the driver so selection never has to load `@vercel/blob` to decide.
+ */
+export const BLOB_TOKEN_PREFIX = "vercel_blob_rw_";
+
+function isBlobReadWriteToken(token: string): boolean {
+  return token.startsWith(BLOB_TOKEN_PREFIX);
+}
+
 function read(key: string): string | undefined {
   const value = process.env[key];
   return value === undefined || value.trim() === "" ? undefined : value.trim();
@@ -46,21 +57,54 @@ function readBool(key: string): boolean {
 }
 
 const BLOB_DIR_HINT =
-  "Set BLOB_DIR to an ABSOLUTE path, e.g. BLOB_DIR=/srv/wf/.data/blobs — or configure the " +
-  `S3 driver with ${S3_REQUIRED.join(", ")}.`;
+  "Set BLOB_DIR to an ABSOLUTE path, e.g. BLOB_DIR=/srv/wf/.data/blobs — or configure a " +
+  "remote driver with BLOB_READ_WRITE_TOKEN (Vercel Blob) or " +
+  `${S3_REQUIRED.join(", ")} (S3).`;
 
 /**
  * Reads the store configuration out of the environment.
  *
- * Any `BLOB_S3_*` variable selects the S3 driver, and then ALL of the required
- * ones must be present. A partially configured S3 store is a hard error naming
- * exactly what is missing, never a quiet fall back to local disk: on Vercel +
- * Render the two processes have no shared filesystem, so a silent fallback
- * means the web app writes a document the worker cannot read, and the only
- * symptom is a `BlobNotFoundError` minutes later on a file the user watched
- * upload.
+ * SELECTION ORDER — first match wins:
+ *
+ *   1. `BLOB_READ_WRITE_TOKEN`  -> Vercel Blob
+ *   2. any `BLOB_S3_*`          -> S3-compatible
+ *   3. `BLOB_DIR`               -> local filesystem
+ *
+ * A partially configured remote driver is a HARD ERROR naming exactly what is
+ * missing or malformed, never a quiet fall back to local disk. On Vercel +
+ * Render the two processes have no shared filesystem — they do not even have
+ * the same disk — so a fallback means the web app writes a document to an
+ * ephemeral Vercel filesystem and the worker looks for it on a Render one. The
+ * only symptom is a `BlobNotFoundError` minutes later on a file the user
+ * watched upload, which is precisely the outage this package exists to prevent.
+ *
+ * THE CORRESPONDING DEPLOY HAZARD, which no single process can detect: both
+ * services must select the SAME driver. Connecting the blob store to the Vercel
+ * project injects `BLOB_READ_WRITE_TOKEN` there automatically, and the worker
+ * on Render gets only what is set by hand — so set it by hand on Render too,
+ * and check the worker's `[worker] blob driver:` line after every deploy.
  */
 export function readBlobStoreConfig(): BlobStoreConfig {
+  /*
+   * Vercel Blob first: one variable, no account to create, and reachable from
+   * anywhere because it is a bearer-token HTTP API rather than a
+   * Vercel-runtime binding.
+   */
+  const token = read("BLOB_READ_WRITE_TOKEN");
+  if (token !== undefined) {
+    if (!isBlobReadWriteToken(token)) {
+      throw new BlobStoreConfigError(
+        `BLOB_READ_WRITE_TOKEN does not look like a Vercel Blob read-write token: it must ` +
+          `start with "${BLOB_TOKEN_PREFIX}". A Vercel ACCESS token, a project token, or a ` +
+          `client upload token will not work here, and the difference only shows up as an ` +
+          `opaque 403 on the first upload. Copy it from the store's ".env.local" tab, or ` +
+          `unset it to select another driver.`,
+        ["BLOB_READ_WRITE_TOKEN"],
+      );
+    }
+    return { driver: "vercel-blob", token };
+  }
+
   const present = [...S3_REQUIRED, ...S3_OPTIONAL].filter((k) => read(k) !== undefined);
 
   if (present.length > 0) {
@@ -121,7 +165,14 @@ export function readBlobStoreConfig(): BlobStoreConfig {
 
 /** One line for the worker's startup log. Never includes a credential. */
 export function describeConfig(config: BlobStoreConfig): string {
-  return config.driver === "filesystem"
-    ? config.dir
-    : `s3://${config.bucket} @ ${config.endpoint}${config.forcePathStyle ? " (path-style)" : ""}`;
+  switch (config.driver) {
+    case "filesystem":
+      return config.dir;
+    case "vercel-blob":
+      return "vercel-blob (store selected by BLOB_READ_WRITE_TOKEN)";
+    case "s3":
+      return `s3://${config.bucket} @ ${config.endpoint}${
+        config.forcePathStyle ? " (path-style)" : ""
+      }`;
+  }
 }

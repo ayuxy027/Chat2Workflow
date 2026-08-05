@@ -150,8 +150,9 @@ async function main(): Promise<void> {
   if (store.driver === "filesystem") {
     console.log(
       "[worker]   local disk — only correct while the web app runs on this same machine. " +
-        "Split across two hosts (Vercel + Render) there is no shared filesystem: set the " +
-        "BLOB_S3_* variables to use object storage.",
+        "Split across two hosts (Vercel + Render) there is no shared filesystem: set " +
+        "BLOB_READ_WRITE_TOKEN (Vercel Blob) or the BLOB_S3_* variables (S3) on BOTH " +
+        "services, and check this line says the same driver in both logs.",
     );
   }
   await reportTools();

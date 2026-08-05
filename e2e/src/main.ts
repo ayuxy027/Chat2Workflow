@@ -75,7 +75,35 @@ async function main(): Promise<number> {
     NODE_ENV: "production",
   };
 
+  /*
+   * PIN THE SUITE TO THE FILESYSTEM DOCUMENT STORE.
+   *
+   * Same reasoning as the private task queue above: ambient state must not be
+   * able to change what the suite tests. `@wf/storage` picks its driver from
+   * the environment, preferring BLOB_READ_WRITE_TOKEN and then BLOB_S3_*, and
+   * bun loads `.env.local` automatically — so a token pulled with
+   * `vercel env pull` silently moved both processes onto Vercel Blob and made
+   * four checks here meaningless rather than failing them honestly:
+   * blobdir.absolute, blobdir.same_for_web_and_worker,
+   * artifact.blobdir_matches and upload.lands_in_shared_store all assert
+   * against a DIRECTORY, which a remote store does not have.
+   *
+   * Those four are the enforcement of "both processes resolve the same store",
+   * which is the property this suite exists to protect, so the suite runs the
+   * local driver and says so. Exercising the remote drivers is a different job
+   * (they need a live bucket), not a silent substitution for this one.
+   */
+  const remoteStoreVars = Object.keys(env).filter(
+    (k) => k === "BLOB_READ_WRITE_TOKEN" || k.startsWith("BLOB_S3_"),
+  );
+  for (const key of remoteStoreVars) delete env[key];
+
   console.log(`  repo        ${REPO_ROOT}`);
+  if (remoteStoreVars.length > 0) {
+    console.log(
+      `  blob driver forced to filesystem; ignoring ${remoteStoreVars.join(", ")} for this run`,
+    );
+  }
   console.log(
     `  workspaces  ${ws.all
       .map((p) => `${p.name} → ${path.relative(REPO_ROOT, p.dir)}`)

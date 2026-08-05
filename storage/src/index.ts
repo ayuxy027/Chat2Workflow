@@ -3,11 +3,19 @@ import type { BlobRef } from "@wf/shared";
 import { describeConfig, readBlobStoreConfig, type BlobStoreConfig } from "./config";
 import { createFilesystemStore } from "./filesystem";
 import { createS3Store } from "./s3";
+import { createVercelBlobStore } from "./vercel-blob";
 import type { BlobMeta, BlobStore, BlobStoreDriver } from "./types";
 
 /**
- * THE content-addressed document store. One interface, two drivers, chosen by
- * environment.
+ * THE content-addressed document store. One interface, three drivers, chosen by
+ * environment:
+ *
+ *   BLOB_READ_WRITE_TOKEN  -> Vercel Blob      (deploy: no third-party account)
+ *   BLOB_S3_*              -> S3-compatible    (deploy: R2, Supabase, B2, MinIO)
+ *   BLOB_DIR               -> local filesystem (development)
+ *
+ * See `readBlobStoreConfig` for the selection rules — in particular that a
+ * half-configured remote driver is a hard error rather than a fallback.
  *
  * There used to be two independent implementations of this — one in the web app
  * and one in the worker, both `node:fs` against a shared `BLOB_DIR` — and they
@@ -45,12 +53,18 @@ export type { BlobStoreConfig } from "./config";
 export { readBlobStoreConfig } from "./config";
 export { createFilesystemStore } from "./filesystem";
 export { createS3Store } from "./s3";
+export { createVercelBlobStore } from "./vercel-blob";
 
 /** Builds a store from an explicit configuration. Reads no environment. */
 export function createBlobStore(config: BlobStoreConfig): BlobStore {
-  return config.driver === "filesystem"
-    ? createFilesystemStore(config.dir)
-    : createS3Store(config);
+  switch (config.driver) {
+    case "filesystem":
+      return createFilesystemStore(config.dir);
+    case "vercel-blob":
+      return createVercelBlobStore(config);
+    case "s3":
+      return createS3Store(config);
+  }
 }
 
 let cached: BlobStore | undefined;
@@ -70,7 +84,9 @@ export function blobStore(): BlobStore {
 /**
  * Which driver, and where it points. Safe to log: no credential appears in it.
  * The worker prints this at boot so "where did that document go?" is answerable
- * from the log rather than by inspecting the environment of a running dyno.
+ * from the log rather than by inspecting the environment of a running dyno —
+ * and so that a worker which picked a DIFFERENT driver from the web app is
+ * visible in one line rather than as a failed document step.
  */
 export function describeBlobStore(): { driver: BlobStoreDriver; location: string } {
   const config = readBlobStoreConfig();

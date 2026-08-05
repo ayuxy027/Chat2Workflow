@@ -3,10 +3,5 @@
   "buildCommand": "bun install --frozen-lockfile && bun run --filter @wf/frontend build",
   "installCommand": "echo skip",
   "outputDirectory": "frontend/.next",
-  "framework": "nextjs",
-  "functions": {
-    "frontend/app/api/sessions/[id]/stream/route.ts": {
-      "maxDuration": 300
-    }
-  }
+  "framework": "nextjs"
 }

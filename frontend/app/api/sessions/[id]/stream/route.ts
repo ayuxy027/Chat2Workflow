@@ -17,6 +17,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
+ * SSE is a long-lived response, and Vercel kills a function at its duration
+ * cap. 300s is the Fluid-compute ceiling; the platform clamps this down if the
+ * plan allows less. Nothing is lost when it fires: the client reconnects with
+ * its cursor and the pump replays from there, so a cut connection costs a
+ * reconnect rather than events.
+ */
+export const maxDuration = 300;
+
+/**
  * `GET /api/sessions/:id/stream?cursor=N` — the SSE pump.
  *
  * Temporal has no server-push to an external client, so this polls the

@@ -29,7 +29,7 @@ services:
   - type: pserv # private service: reachable only from other Render services
     name: wf-temporal
     runtime: image
-    plan: starter
+    plan: free
     image:
       url: docker.io/temporalio/auto-setup:1.29
     envVars:
@@ -68,7 +68,7 @@ services:
   - type: worker
     name: wf-worker
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm install -g bun@1.3.14 && bun install --frozen-lockfile && bun run --filter @wf/backend build
     startCommand: node backend/dist/main.js

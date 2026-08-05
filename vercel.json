@@ -1,7 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "bun install --frozen-lockfile && bun run --filter @wf/frontend build",
-  "installCommand": "echo skip",
-  "outputDirectory": "frontend/.next",
-  "framework": "nextjs"
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }

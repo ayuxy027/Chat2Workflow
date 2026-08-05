@@ -9,6 +9,7 @@ COPY shared/package.json   shared/
 COPY storage/package.json  storage/
 COPY backend/package.json  backend/
 COPY frontend/package.json frontend/
+COPY e2e/package.json      e2e/
 RUN bun install --frozen-lockfile
 
 COPY shared/  shared/
